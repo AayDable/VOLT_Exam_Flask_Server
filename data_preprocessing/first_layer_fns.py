@@ -6,8 +6,8 @@ from data_retrieval import *
 from mappings import *
 from queries import pgsql_queries
 import asyncio
-
 # from data_preprocessing.helper_fns import query_builder
+from cache import cache_manager
 
 pg_client = PGSQLData()
 
@@ -26,14 +26,20 @@ async def l1_get_rawdata_cleaned():
     df['dep_prefix'] = df['dep_prefix'].map(deps_mapping)
     
 
-    df['Employee Code'] = df['rollNo'].apply(lambda x:"GE00"+re.sub(r"\D+", "", x))
+    # df['Employee Code'] = df['rollNo'].apply(lambda x:"GE00"+re.sub(r"\D+", "", x))
+    df['Employee Code'] = df['rollNo'].apply(lambda x: "GE00" + re.sub(r"\D+", "", x).lstrip('0') if re.sub(r"\D+", "", x) else "GE00")
+
     df['batch_suffix'] = df['rollNo'].apply(lambda x:re.sub(r'(?=\d).*$', '', x[::-1])[::-1])
     df['batch_suffix'] = df['batch_suffix'].map(rollno_suffix_mapping)
     df = df[df['courseName'].str.startswith('Human Resource') == False].copy()
     return df
 
+async def l1_get_userid_name_mapping():
+    df = await cache_manager.get_or_fetch(l1_get_rawdata_cleaned)
+    return df[['candidateName','Employee Code']].drop_duplicates().reset_index(drop=True)
+
 async def l1_get_proper_dashboard_data_unprocessed():
-    df = await l1_get_rawdata_cleaned()
+    df = await cache_manager.get_or_fetch(l1_get_rawdata_cleaned)
     dep_wise_max_marks = df[['MaxPossibleScore','dep_prefix']].drop_duplicates().copy()
     df['courseName_cleaned'] = df["dep_prefix"].astype(str) + "_" + df["batch_suffix"].astype(str)
     df['courseName_cleaned_percent'] = df['courseName_cleaned'] + " %"
