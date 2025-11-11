@@ -12,4 +12,4 @@ if __name__ == "__main__":
     asyncio.run(serve(app, config))
 
 # or run this 
-#hypercorn flask_app:app --bind 0.0.0.0:3003 --workers 1
+#hypercorn flask_app:app --bind 0.0.0.0:3005 --workers 1

@@ -326,84 +326,48 @@ async def l2_dummy_fn():
     df = pd.DataFrame(['hi'],columns=['greeting'])
     return df
 
-# async def report_card_trainee(candidate=None, user_id=None):
-#     """
-#     Generate a PDF report card in memory
-#     Returns: bytes object containing the PDF
-#     """
-    
-#     if candidate and candidate != 'All':
-#             df = await cache_manager.get_or_fetch(l1_get_userid_name_mapping)
-#             candidate = unquote(candidate)
-#             employee_ids_for_employee = df.query('candidateName == @candidate')
-
-#             if len(employee_ids_for_employee)>0:
-#                 employee_id = employee_ids_for_employee.iloc[0]['Employee Code']
-
-#     elif user_id:
-#         employee_id = user_id
-
-#     df = await l2_get_trainee_score_matrix(user_id=user_id)
-
-#     # Create a BytesIO buffer
-#     buffer = BytesIO()
-    
-#     # Create the PDF document
-#     doc = SimpleDocTemplate(buffer, pagesize=letter)
-    
-#     # Container for PDF elements
-#     elements = []
-#     styles = getSampleStyleSheet()
-    
-#     # Add content
-#     elements.append(Paragraph(f"Report Card for User: {user_id}", styles['Title']))
-#     elements.append(Spacer(1, 12))
-#     elements.append(Paragraph("This is a sample report generated in memory.", styles['Normal']))
-    
-#     # Build the PDF
-#     doc.build(elements)
-    
-#     # Get the PDF bytes and return them
-#     pdf_bytes = buffer.getvalue()
-#     buffer.close()
-    
-#     return pdf_bytes
-
 async def report_card_trainee(candidate=None, user_id=None):
     """
     Generate a PDF report card in memory
     Returns: bytes object containing the PDF
     """
-    
+
+    # Resolve employee id
     if not user_id:
         candidate = unquote(candidate)
         df_mapping = await cache_manager.get_or_fetch(l1_get_userid_name_mapping)
         employee_ids_for_employee = df_mapping.query('candidateName == @candidate')
         if len(employee_ids_for_employee) > 0:
             employee_id = employee_ids_for_employee.iloc[0]['Employee Code']
+        else:
+            employee_id = None
     else:
         employee_id = user_id
-        
+
     # Get the trainee score matrix
     df = await l2_get_trainee_score_matrix(user_id=employee_id)
+
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    num_cols_no_pct = [c for c in num_cols if '%' not in c]
+    df[num_cols_no_pct] = df[num_cols_no_pct].astype('float') 
     
     # Create a BytesIO buffer
     buffer = BytesIO()
-    
+
     # Create the PDF document with LANDSCAPE orientation and reduced margins
     doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=landscape(letter),  # Changed to landscape
+        buffer,
+        pagesize=landscape(letter),
         rightMargin=30,
         leftMargin=30,
         topMargin=40,
         bottomMargin=40
     )
-    
+
     # Container for PDF elements
     elements = []
     styles = getSampleStyleSheet()
-    
+
     # Create custom styles
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -414,7 +378,7 @@ async def report_card_trainee(candidate=None, user_id=None):
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
     )
-    
+
     subtitle_style = ParagraphStyle(
         'CustomSubtitle',
         parent=styles['Heading2'],
@@ -424,7 +388,7 @@ async def report_card_trainee(candidate=None, user_id=None):
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
     )
-    
+
     info_style = ParagraphStyle(
         'InfoStyle',
         parent=styles['Normal'],
@@ -433,75 +397,156 @@ async def report_card_trainee(candidate=None, user_id=None):
         spaceAfter=10,
         alignment=TA_LEFT
     )
-    
+
     # Add header/title
     elements.append(Paragraph("Training Assessment Report Card", title_style))
     elements.append(Spacer(1, 10))
-    
+
     # Add employee information
     if employee_id:
         elements.append(Paragraph(f"<b>Employee ID:</b> {employee_id}", info_style))
     if candidate and candidate != 'All':
         elements.append(Paragraph(f"<b>Candidate Name:</b> {candidate}", info_style))
-    
+
     elements.append(Spacer(1, 15))
-    elements.append(Paragraph("Department-wise Performance Summary", subtitle_style))
+    elements.append(Paragraph("Departments Performance Summary", subtitle_style))
     elements.append(Spacer(1, 10))
+
+    # Prepare table data - format ONLY percentage columns as integers
+    header = df.columns.tolist()
     
-    # Prepare table data
-    # Add header row
-    table_data = [df.columns.tolist()]
-    
-    # Add data rows
-    for idx, row in df.iterrows():
-        table_data.append(row.tolist())
-    
-    # Calculate column widths dynamically based on landscape width
-    # Landscape letter = 11 inches width, minus margins (30*2 = 60 points = ~0.83 inches)
-    # Available width ~ 10 inches
+    # Identify percentage columns by header names
+    pct_col_indices = {i for i, name in enumerate(header) if '%' in str(name)}
+
+    table_data = [header]
+    for _, row in df.iterrows():
+        formatted_row = []
+        for i, val in enumerate(row):
+            # Only format percentage columns as whole numbers
+            if i in pct_col_indices:
+                try:
+                    if pd.isna(val):
+                        formatted_row.append(val)
+                    elif isinstance(val, (int, float, np.integer, np.floating)):
+                        formatted_row.append(int(round(float(val))))
+                    elif isinstance(val, str):
+                        s = val.strip().replace('%', '')
+                        if s in ('', '-'):
+                            formatted_row.append(val)
+                        else:
+                            formatted_row.append(int(round(float(s))))
+                    else:
+                        formatted_row.append(val)
+                except (ValueError, TypeError):
+                    formatted_row.append(val)
+            else:
+                # Leave non-percentage columns as-is
+                formatted_row.append(val)
+        table_data.append(formatted_row)
+
+    # Column widths
     available_width = 10 * inch
-    num_cols = len(df.columns)
-    
-    # Give more space to Department column, distribute rest evenly
+    num_cols = len(header)
     dept_col_width = 1.5 * inch
     remaining_width = available_width - dept_col_width
-    other_col_width = remaining_width / (num_cols - 1)
-    
+    other_col_width = remaining_width / (num_cols - 1) if num_cols > 1 else remaining_width
     col_widths = [dept_col_width] + [other_col_width] * (num_cols - 1)
-    
+
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    
-    # Apply table styling with REDUCED FONT SIZE
+
+    # Lighter alternating rows to harmonize with column-group tints
+    row_white = colors.white
+    row_grey = colors.Color(0.96, 0.96, 0.96)
+
     table_style = TableStyle([
         # Header styling
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f78c1')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),  # Reduced from 10
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('TOPPADDING', (0, 0), (-1, 0), 10),
-        
-        # Data rows styling
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+
+        # Base body styling
         ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
         ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
         ('ALIGN', (0, 1), (0, -1), 'LEFT'),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),  # Reduced from 9
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
         ('TOPPADDING', (0, 1), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        
+
         # Grid styling
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#155a8a')),
-        
-        # Alternating row colors
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+
+        # Department-wise alternating row shading
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [row_white, row_grey]),
     ])
-    
-    # Add conditional formatting for Status column (last column)
-    status_col_idx = len(df.columns) - 1
+
+    # Column-group shading for Attempt pairs and Final pair
+    column_white = colors.white
+    column_grey = colors.Color(0.86, 0.86, 0.86)
+
+    col_index = {name: i for i, name in enumerate(header)}
+    a1, a1p = col_index.get("Attempt 1"), col_index.get("Attempt 1 %")
+    a2, a2p = col_index.get("Attempt 2"), col_index.get("Attempt 2 %")
+    a3, a3p = col_index.get("Attempt 3"), col_index.get("Attempt 3 %")
+    fs, fsp = col_index.get("Final Score"), col_index.get("Final Score %")
+
+    first_data_row = 1
+    last_row = len(table_data) - 1
+
+    def shade_pair(c1, c2, color):
+        if c1 is not None and c2 is not None and last_row >= first_data_row:
+            l, r = min(c1, c2), max(c1, c2)
+            table_style.add('BACKGROUND', (l, first_data_row), (r, last_row), color)
+
+    shade_pair(a1, a1p, column_grey)
+    shade_pair(a2, a2p, column_white)
+    shade_pair(a3, a3p, column_grey)
+    shade_pair(fs, fsp, column_white)
+
+    # Emphasize attempt and final headers
+    for c in [a1, a1p, a2, a2p, a3, a3p, fs, fsp]:
+        if c is not None:
+            table_style.add('FONTNAME', (c, 0), (c, 0), 'Helvetica-Bold')
+
+    # Bold the Final Score and Final Score % values in the body as well
+    if fs is not None:
+        table_style.add('FONTNAME', (fs, first_data_row), (fs, last_row), 'Helvetica-Bold')
+    if fsp is not None:
+        table_style.add('FONTNAME', (fsp, first_data_row), (fsp, last_row), 'Helvetica-Bold')
+
+    # Conditional formatting: red text when thresholds are not met
+    def mark_if_below(col_idx, predicate):
+        if col_idx is None:
+            return
+        for row_idx in range(1, len(table_data)):
+            val = table_data[row_idx][col_idx]
+            try:
+                num = None
+                if isinstance(val, (int, float)):
+                    num = float(val)
+                elif isinstance(val, str):
+                    s = val.strip().replace('%', '')
+                    num = float(s) if s not in ('', '-') else None
+                if num is not None and predicate(num):
+                    table_style.add('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.red)
+            except Exception:
+                pass
+
+    below_15 = lambda x: x < 15 and x != 0
+    below_75pct = lambda x: x < 75 and x != 0
+
+    for idx in [a1, a2, a3, fs]:
+        mark_if_below(idx, below_15)
+    for idx in [a1p, a2p, a3p, fsp]:
+        mark_if_below(idx, below_75pct)
+
+    # Existing conditional coloring for overall Status column
+    status_col_idx = len(header) - 1
     for row_idx in range(1, len(table_data)):
         status_value = table_data[row_idx][status_col_idx]
         if status_value == 'Pass':
@@ -513,29 +558,27 @@ async def report_card_trainee(candidate=None, user_id=None):
         elif status_value == 'Pending':
             table_style.add('TEXTCOLOR', (status_col_idx, row_idx), (status_col_idx, row_idx), colors.orange)
             table_style.add('FONTNAME', (status_col_idx, row_idx), (status_col_idx, row_idx), 'Helvetica-Bold')
-    
+
     table.setStyle(table_style)
     elements.append(table)
-    
-    # Add summary statistics
+
+    # Summary
     elements.append(Spacer(1, 25))
-    elements.append(Paragraph("Summary", subtitle_style))  # Changed from "Summary Statistics"
+    elements.append(Paragraph("Summary", subtitle_style))
     elements.append(Spacer(1, 10))
-    
-    # Calculate summary stats (removed pass rate)
+
     passed_count = (df['Status'] == 'Pass').sum()
     pending_count = (df['Status'] == 'Pending').sum()
     total_departments = len(df)
-    
+
     summary_text = f"""
     <b>Total Departments:</b> {total_departments}<br/>
     <b>Passed:</b> {passed_count}<br/>
     <b>Pending:</b> {pending_count}
     """
-    
     elements.append(Paragraph(summary_text, info_style))
-    
-    # Add footer
+
+    # Footer
     elements.append(Spacer(1, 25))
     footer_text = "This report is auto-generated and contains confidential information."
     footer_style = ParagraphStyle(
@@ -547,17 +590,14 @@ async def report_card_trainee(candidate=None, user_id=None):
         italic=True
     )
     elements.append(Paragraph(footer_text, footer_style))
-    
+
     # Build the PDF
     doc.build(elements)
-    
-    # Get the PDF bytes and return them
+
+    # Return bytes
     pdf_bytes = buffer.getvalue()
     buffer.close()
-    
     return pdf_bytes
-
-
 
 @pre_post_process
 async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
@@ -580,6 +620,7 @@ async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
 
     dfm = df.melt()
     dfm = transform_to_matrix(dfm)
+    dfm = dfm.astype(str)
     dfm.fillna('None',inplace=True)
     dfm.replace('None',None,inplace=True)
     return dfm
