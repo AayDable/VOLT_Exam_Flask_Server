@@ -350,7 +350,7 @@ async def report_card_trainee(candidate=None, user_id=None):
     num_cols = df.select_dtypes(include=[np.number]).columns
     num_cols_no_pct = [c for c in num_cols if '%' not in c]
     df[num_cols_no_pct] = df[num_cols_no_pct].astype('float') 
-    
+
     # Create a BytesIO buffer
     buffer = BytesIO()
 
@@ -622,6 +622,7 @@ async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
     dfm = transform_to_matrix(dfm)
     dfm = dfm.astype(str)
     dfm.fillna('None',inplace=True)
+    dfm.replace('nan',None, inplace=True)
     dfm.replace('None',None,inplace=True)
     return dfm
 
