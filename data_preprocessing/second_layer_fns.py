@@ -620,9 +620,7 @@ async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
 
     dfm = df.melt()
     dfm = transform_to_matrix(dfm)
-    dfm = dfm.astype(str)
     dfm.fillna('None',inplace=True)
-    dfm.replace('nan',None, inplace=True)
     dfm.replace('None',None,inplace=True)
     return dfm
 
