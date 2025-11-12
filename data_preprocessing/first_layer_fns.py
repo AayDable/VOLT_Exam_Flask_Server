@@ -31,7 +31,6 @@ async def l1_get_rawdata_cleaned():
 
     df['batch_suffix'] = df['rollNo'].apply(lambda x:re.sub(r'(?=\d).*$', '', x[::-1])[::-1])
     df['batch_suffix'] = df['batch_suffix'].map(rollno_suffix_mapping)
-    df = df[df['courseName'].str.startswith('Human Resource') == False].copy()
     return df
 
 async def l1_get_userid_name_mapping():
