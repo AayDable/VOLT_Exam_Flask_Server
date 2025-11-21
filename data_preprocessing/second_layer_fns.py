@@ -399,7 +399,7 @@ async def report_card_trainee(candidate=None, user_id=None):
     )
 
     # Add header/title
-    elements.append(Paragraph("Training Assessment Report Card", title_style))
+    elements.append(Paragraph("VOLT Trainee: Assessment Report Card (Batch-1)", title_style))
     elements.append(Spacer(1, 10))
 
     # Add employee information
