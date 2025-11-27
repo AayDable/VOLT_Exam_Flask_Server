@@ -422,28 +422,29 @@ async def report_card_trainee(candidate=None, user_id=None):
     for _, row in df.iterrows():
         formatted_row = []
         for i, val in enumerate(row):
+            # Check if value is null/NaN first
+            if pd.isna(val):
+                formatted_row.append('NA')
             # Only format percentage columns as whole numbers
-            if i in pct_col_indices:
+            elif i in pct_col_indices:
                 try:
-                    if pd.isna(val):
-                        formatted_row.append(val)
-                    elif isinstance(val, (int, float, np.integer, np.floating)):
+                    if isinstance(val, (int, float, np.integer, np.floating)):
                         formatted_row.append(int(round(float(val))))
                     elif isinstance(val, str):
                         s = val.strip().replace('%', '')
                         if s in ('', '-'):
-                            formatted_row.append(val)
+                            formatted_row.append('NA')
                         else:
                             formatted_row.append(int(round(float(s))))
                     else:
                         formatted_row.append(val)
                 except (ValueError, TypeError):
-                    formatted_row.append(val)
+                    formatted_row.append('NA')
             else:
-                # Leave non-percentage columns as-is
+                # Leave non-percentage columns as-is (but convert NaN to NA if missed)
                 formatted_row.append(val)
         table_data.append(formatted_row)
-
+        
     # Column widths
     available_width = 10 * inch
     num_cols = len(header)
