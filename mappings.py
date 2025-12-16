@@ -5,7 +5,8 @@ deps_mapping = {
                     'MA':'Marketing',
                     'FI':'Finance',
                     'TR':'Transport',
-                    'HR':'HR'
+                    'HR':'HR',
+                    'ADO':'Admin Operations'
                     }
 
 employee_status_mapping =   {
