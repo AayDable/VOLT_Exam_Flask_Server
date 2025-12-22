@@ -25,8 +25,7 @@ and pm."isDeleted" = false
 and pm."enabledBy" > 0
 and c2."isDeleted" = false
 and c2."rPacksUploaded" = false
-and c."isDeleted" = false
-and c2."loggedInCount" > 0;
+and c."isDeleted" = false;
 """
 ,
 
