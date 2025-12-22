@@ -23,7 +23,7 @@ async def l1_get_rawdata_cleaned():
 
     df['dep_prefix'] = df['rollNo'].apply(lambda x:re.sub(r'(?=\d).*$', '', x))
     df = df.query('dep_prefix != @dummy_rollno_prefixes').copy()
-    df['dep_prefix'] = df['dep_prefix'].map(deps_mapping)
+    df['dep_prefix'] = df['dep_prefix'].map(DEPS_MAPPING)
     
 
     # df['Employee Code'] = df['rollNo'].apply(lambda x:"GE00"+re.sub(r"\D+", "", x))
@@ -39,6 +39,10 @@ async def l1_get_userid_name_mapping():
 
 async def l1_get_proper_dashboard_data_unprocessed():
     df = await cache_manager.get_or_fetch(l1_get_rawdata_cleaned)
+
+    #Only allow those departments to show who have at least one submitted exam.
+    deps_mapping = {key:DEPS_MAPPING[key] for key in DEPS_MAPPING if DEPS_MAPPING[key] in df['dep_prefix'].unique()}
+
     dep_wise_max_marks = df[['MaxPossibleScore','dep_prefix']].drop_duplicates().copy()
     df['courseName_cleaned'] = df["dep_prefix"].astype(str) + "_" + df["batch_suffix"].astype(str)
     df['courseName_cleaned_percent'] = df['courseName_cleaned'] + " %"
@@ -51,6 +55,7 @@ async def l1_get_proper_dashboard_data_unprocessed():
 
     df = df.groupby('candidateName').agg('first').reset_index()
 
+    
     for dep in deps_mapping.values():
         df[f'{dep} Max Marks'] = dep_wise_max_marks.query("dep_prefix == @dep").MaxPossibleScore.iloc[0]
     for dep in deps_mapping.values():

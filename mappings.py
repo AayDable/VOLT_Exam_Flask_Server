@@ -1,13 +1,23 @@
 #Department abbreviation name mapping
-deps_mapping = {
-                    'SA':'Sales',
-                    'LE':'Legal',
-                    'MA':'Marketing',
-                    'FI':'Finance',
-                    'TR':'Transport',
-                    'HR':'HR',
-                    'ADO':'Admin Operations'
-                    }
+DEPS_MAPPING = {
+    'SA': 'Sales',
+    'LE': 'Legal',
+    'MA': 'Marketing',
+    'FI': 'Finance',
+    'TR': 'Transport',
+    'HR': 'HR',
+    'ADO': 'Admin Operations',
+    'ACO': 'Academic Operations',
+    'ACS': 'Academic Support',
+    'D&E': 'Development And Expansion',
+    'IT': 'IT',
+    'ACC': 'Academic Content PP',
+    'ACP': 'Academic Content Primary',
+    'AP': 'Academic Partnership',
+    'SPA': 'Spark',
+    'SCHL': 'SCHL',
+}
+
 
 employee_status_mapping =   {
                             "Pass":"Pass",

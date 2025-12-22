@@ -161,8 +161,8 @@ async def l2_pass_fail_pending_count():
 
 @pre_post_process
 async def l2_get_dashboard_data_for_dep(chosen_dep,candidate=None,user_id=None):
-    global deps_mapping
-    dep_map = deepcopy(deps_mapping)
+    global DEPS_MAPPING
+    dep_map = deepcopy(DEPS_MAPPING)
     employee_id = None
 
     df = await cache_manager.get_or_fetch(l1_get_rawdata_cleaned)
@@ -179,6 +179,7 @@ async def l2_get_dashboard_data_for_dep(chosen_dep,candidate=None,user_id=None):
         employee_id = user_id
 
     if chosen_dep:
+        chosen_dep = unquote(chosen_dep)
         if chosen_dep != 'All':
             df.query("dep_prefix == @chosen_dep",inplace=True)
             dep_map = {key:dep_map[key] for key in dep_map if dep_map[key] == chosen_dep}

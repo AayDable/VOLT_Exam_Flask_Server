@@ -72,7 +72,7 @@ def transform_to_matrix(df):
     DataFrame with departments as rows and attempts/final/status as columns
     """
     # Extract department names
-    departments = ['Sales', 'Legal', 'Marketing', 'Finance', 'Transport', 'HR']
+    departments = DEPS_MAPPING.values()
     
     # Initialize result dictionary
     result = {
