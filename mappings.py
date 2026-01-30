@@ -14,8 +14,8 @@ DEPS_MAPPING = {
     'ACC': 'Academic Content PP',
     'ACP': 'Academic Content Primary',
     'AP': 'Academic Partnership',
-    'SPA': 'Spark',
-    'SCHL': 'SCHL',
+    'SPA': 'SPARK',
+    'SCHL': 'School',
 }
 
 

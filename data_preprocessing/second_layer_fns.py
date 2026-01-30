@@ -327,6 +327,8 @@ async def l2_dummy_fn():
     df = pd.DataFrame(['hi'],columns=['greeting'])
     return df
 
+from reportlab.platypus import Paragraph
+
 async def report_card_trainee(candidate=None, user_id=None):
     """
     Generate a PDF report card in memory
@@ -399,8 +401,39 @@ async def report_card_trainee(candidate=None, user_id=None):
         alignment=TA_LEFT
     )
 
+    # Cell paragraph styles for table
+    cell_header_style = ParagraphStyle(
+        'CellHeader',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.whitesmoke,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        wordWrap='CJK'
+    )
+
+    cell_body_style = ParagraphStyle(
+        'CellBody',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.black,
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        wordWrap='CJK'
+    )
+
+    cell_dept_style = ParagraphStyle(
+        'CellDept',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.black,
+        alignment=TA_LEFT,
+        fontName='Helvetica',
+        wordWrap='CJK'
+    )
+
     # Add header/title
-    elements.append(Paragraph("VOLT Trainee: Assessment Report Card (Batch-1)", title_style))
+    elements.append(Paragraph("VOLT Trainee: Assesspro Report Card", title_style))
     elements.append(Spacer(1, 10))
 
     # Add employee information
@@ -419,31 +452,40 @@ async def report_card_trainee(candidate=None, user_id=None):
     # Identify percentage columns by header names
     pct_col_indices = {i for i, name in enumerate(header) if '%' in str(name)}
 
-    table_data = [header]
+    # Wrap header in Paragraph objects
+    table_data = [[Paragraph(str(h), cell_header_style) for h in header]]
+    
     for _, row in df.iterrows():
         formatted_row = []
         for i, val in enumerate(row):
             # Check if value is null/NaN first
             if pd.isna(val):
-                formatted_row.append('NA')
+                cell_value = 'NA'
             # Only format percentage columns as whole numbers
             elif i in pct_col_indices:
                 try:
                     if isinstance(val, (int, float, np.integer, np.floating)):
-                        formatted_row.append(int(round(float(val))))
+                        cell_value = str(int(round(float(val))))
                     elif isinstance(val, str):
                         s = val.strip().replace('%', '')
                         if s in ('', '-'):
-                            formatted_row.append('NA')
+                            cell_value = 'NA'
                         else:
-                            formatted_row.append(int(round(float(s))))
+                            cell_value = str(int(round(float(s))))
                     else:
-                        formatted_row.append(val)
+                        cell_value = str(val)
                 except (ValueError, TypeError):
-                    formatted_row.append('NA')
+                    cell_value = 'NA'
             else:
                 # Leave non-percentage columns as-is (but convert NaN to NA if missed)
-                formatted_row.append(val)
+                cell_value = str(val)
+            
+            # Wrap in Paragraph - use dept style for first column, body style for others
+            if i == 0:
+                formatted_row.append(Paragraph(cell_value, cell_dept_style))
+            else:
+                formatted_row.append(Paragraph(cell_value, cell_body_style))
+        
         table_data.append(formatted_row)
         
     # Column widths
@@ -463,21 +505,23 @@ async def report_card_trainee(candidate=None, user_id=None):
     table_style = TableStyle([
         # Header styling
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f78c1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('TOPPADDING', (0, 0), (-1, 0), 10),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
 
         # Base body styling
-        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
         ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
         ('ALIGN', (0, 1), (0, -1), 'LEFT'),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 10),
         ('TOPPADDING', (0, 1), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
 
         # Grid styling
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -522,20 +566,39 @@ async def report_card_trainee(candidate=None, user_id=None):
         table_style.add('FONTNAME', (fsp, first_data_row), (fsp, last_row), 'Helvetica-Bold')
 
     # Conditional formatting: red text when thresholds are not met
-    def mark_if_below(col_idx, predicate):
+    # Note: Since we're using Paragraphs now, we need to modify the paragraph text color
+    def get_cell_text(cell):
+        """Extract text from Paragraph object"""
+        if isinstance(cell, Paragraph):
+            # Get the text from the paragraph (strip HTML tags if any)
+            import re
+            text = re.sub('<[^<]+?>', '', cell.text)
+            return text.strip()
+        return str(cell)
+
+    def mark_if_below(col_idx, predicate, color_hex='red'):
         if col_idx is None:
             return
         for row_idx in range(1, len(table_data)):
-            val = table_data[row_idx][col_idx]
+            val_text = get_cell_text(table_data[row_idx][col_idx])
             try:
                 num = None
-                if isinstance(val, (int, float)):
-                    num = float(val)
-                elif isinstance(val, str):
-                    s = val.strip().replace('%', '')
-                    num = float(s) if s not in ('', '-') else None
+                s = val_text.strip().replace('%', '')
+                num = float(s) if s not in ('', '-', 'NA') else None
+                
                 if num is not None and predicate(num):
-                    table_style.add('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.red)
+                    # Replace the paragraph with a red-colored version
+                    if col_idx == 0:
+                        style = cell_dept_style
+                    else:
+                        style = cell_body_style
+                    
+                    red_style = ParagraphStyle(
+                        f'Red_{row_idx}_{col_idx}',
+                        parent=style,
+                        textColor=colors.red
+                    )
+                    table_data[row_idx][col_idx] = Paragraph(val_text, red_style)
             except Exception:
                 pass
 
@@ -550,16 +613,32 @@ async def report_card_trainee(candidate=None, user_id=None):
     # Existing conditional coloring for overall Status column
     status_col_idx = len(header) - 1
     for row_idx in range(1, len(table_data)):
-        status_value = table_data[row_idx][status_col_idx]
+        status_value = get_cell_text(table_data[row_idx][status_col_idx])
+        
         if status_value == 'Pass':
-            table_style.add('TEXTCOLOR', (status_col_idx, row_idx), (status_col_idx, row_idx), colors.green)
-            table_style.add('FONTNAME', (status_col_idx, row_idx), (status_col_idx, row_idx), 'Helvetica-Bold')
+            pass_style = ParagraphStyle(
+                f'Pass_{row_idx}',
+                parent=cell_body_style,
+                textColor=colors.green,
+                fontName='Helvetica-Bold'
+            )
+            table_data[row_idx][status_col_idx] = Paragraph(status_value, pass_style)
         elif status_value == 'Fail':
-            table_style.add('TEXTCOLOR', (status_col_idx, row_idx), (status_col_idx, row_idx), colors.red)
-            table_style.add('FONTNAME', (status_col_idx, row_idx), (status_col_idx, row_idx), 'Helvetica-Bold')
+            fail_style = ParagraphStyle(
+                f'Fail_{row_idx}',
+                parent=cell_body_style,
+                textColor=colors.red,
+                fontName='Helvetica-Bold'
+            )
+            table_data[row_idx][status_col_idx] = Paragraph(status_value, fail_style)
         elif status_value == 'Pending':
-            table_style.add('TEXTCOLOR', (status_col_idx, row_idx), (status_col_idx, row_idx), colors.orange)
-            table_style.add('FONTNAME', (status_col_idx, row_idx), (status_col_idx, row_idx), 'Helvetica-Bold')
+            pending_style = ParagraphStyle(
+                f'Pending_{row_idx}',
+                parent=cell_body_style,
+                textColor=colors.orange,
+                fontName='Helvetica-Bold'
+            )
+            table_data[row_idx][status_col_idx] = Paragraph(status_value, pending_style)
 
     table.setStyle(table_style)
     elements.append(table)
@@ -605,7 +684,11 @@ async def report_card_trainee(candidate=None, user_id=None):
 async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
     employee_id = None
 
-    df = await cache_manager.get_or_fetch(l1_get_proper_dashboard_data_unprocessed)
+    df,df_raw = await asyncio.gather(l1_get_proper_dashboard_data_unprocessed(),
+                                     l1_get_rawdata_cleaned()
+                                     )
+
+    available_deps = {key:DEPS_MAPPING[key] for key in DEPS_MAPPING if DEPS_MAPPING[key] in df_raw['dep_prefix'].unique()}
 
     if candidate and candidate != 'All':
             candidate = unquote(candidate)
@@ -621,7 +704,7 @@ async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
         df.query('`Employee Code` == @employee_id',inplace=True)
 
     dfm = df.melt()
-    dfm = transform_to_matrix(dfm)
+    dfm = transform_to_matrix(dfm,available_deps.values())
     dfm.fillna('None',inplace=True)
     dfm.replace('None',None,inplace=True)
     return dfm

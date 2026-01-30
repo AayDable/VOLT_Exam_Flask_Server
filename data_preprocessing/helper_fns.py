@@ -61,7 +61,7 @@ def dataframe_to_json(df):
     
     return df_copy.to_dict('records')
 
-def transform_to_matrix(df):
+def transform_to_matrix(df,departments):
     """
     Transform the variable-value DataFrame into a matrix format
     
@@ -71,8 +71,6 @@ def transform_to_matrix(df):
     Returns:
     DataFrame with departments as rows and attempts/final/status as columns
     """
-    # Extract department names
-    departments = DEPS_MAPPING.values()
     
     # Initialize result dictionary
     result = {
