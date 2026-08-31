@@ -11,6 +11,8 @@ Uses function name as cache key for automatic key management.
 import asyncio
 from expiringdict import ExpiringDict
 from copy import deepcopy
+from context import current_batch_id
+from data_preprocessing.helper_fns import to_snake_case
 
 class CacheManager:
     def __init__(self, max_len=100, max_age_seconds=20):
@@ -30,8 +32,11 @@ class CacheManager:
             Cached or freshly fetched data
         """
         # Use function name as cache key
-        key = fetch_func.__name__
-        
+        try:
+            key = fetch_func.__name__ + "_" + to_snake_case(current_batch_id.get())
+        except Exception as e:
+            raise ValueError(f"Batch ID or Function name is invalid. Error: {e}")
+
         # ✅ FIRST CHECK (No Lock) - Fast path for cache hits
         if key in self.cache:
             # print(f"✅ Cache hit for {key} - returning cached data")

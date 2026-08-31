@@ -168,6 +168,9 @@ async def l2_get_dashboard_data_for_dep(chosen_dep,candidate=None,user_id=None):
     df = await cache_manager.get_or_fetch(l1_get_rawdata_cleaned)
     dep_wise_max_marks = df[['MaxPossibleScore','dep_prefix']].drop_duplicates().copy()
 
+    #only these available so dep_map constricted to available deps
+    dep_map = {key:dep_map[key] for key in dep_map if dep_map[key] in list(dep_wise_max_marks['dep_prefix'])}
+
     if candidate and candidate != 'All':
             candidate = unquote(candidate)
             employee_ids_for_employee = df.query('candidateName == @candidate')
@@ -216,16 +219,18 @@ async def l2_get_dashboard_data_for_dep(chosen_dep,candidate=None,user_id=None):
         else:
             return 'Fail'
     
-    for dep in dep_map.values():
-        cols = [f'{dep}_Attempt 1 %',f'{dep}_Attempt 2 %',f'{dep}_Attempt 3 %',f'{dep} Final Score %']
-        status_cols = [f'{dep} Attempt 1 Status',f'{dep} Attempt 2 Status',f'{dep} Attempt 3 Status',f'{dep} Final Status']
-        for col,status_col in zip(cols,status_cols):
-            if col in df.columns:
-                df[status_col] = df[col].map(pass_fail_fn)
-            else:
-                df[col] = None
-                df[col.replace('%','').strip()] = None
-                df[status_col] = 'Pending'
+    # for dep in dep_map.values():
+    #     cols = [f'{dep}_Attempt 1 %',f'{dep}_Attempt 2 %',f'{dep}_Attempt 3 %',f'{dep} Final Score %']
+    #     status_cols = [f'{dep} Attempt 1 Status',f'{dep} Attempt 2 Status',f'{dep} Attempt 3 Status',f'{dep} Final Status']
+    #     for col,status_col in zip(cols,status_cols):
+    #         if col in df.columns:
+    #             df[status_col] = df[col].map(pass_fail_fn)
+    #         else:
+    #             df[col] = None
+    #             df[col.replace('%','').strip()] = None
+    #             df[status_col] = 'Pending'
+    
+    df = add_status_columns(df,dep_map,pass_fail_fn)
         
 
     new_order = ['candidateName','Employee Code','hallName']
@@ -308,7 +313,7 @@ async def l2_get_dashboard_data_for_dep(chosen_dep,candidate=None,user_id=None):
 
     df = df.fillna('None')
     df = df.replace('None',None)
-    df.drop('MaxPossibleScore',axis=1,inplace=True)
+    df = df.drop(['MaxPossibleScore'],axis=1)
     df.columns = [item.replace('_',' ') for item in df.columns.to_list()]
 
     return df
@@ -705,8 +710,8 @@ async def l2_get_trainee_score_matrix(candidate=None,user_id=None):
 
     dfm = df.melt()
     dfm = transform_to_matrix(dfm,available_deps.values())
-    dfm.fillna('None',inplace=True)
-    dfm.replace('None',None,inplace=True)
+    dfm = dfm.fillna('None')
+    dfm = dfm.replace('None',None)
     return dfm
 
 

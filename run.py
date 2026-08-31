@@ -4,7 +4,7 @@ from hypercorn.config import Config
 from flask_app import app
 
 config = Config()
-config.bind = ["0.0.0.0:3003"]
+config.bind = ["0.0.0.0:3005"]
 config.workers = 1
 config.worker_class = "asyncio"
 

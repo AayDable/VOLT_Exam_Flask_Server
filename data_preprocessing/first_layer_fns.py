@@ -6,8 +6,9 @@ from data_retrieval import *
 from mappings import *
 from queries import pgsql_queries
 import asyncio
-# from data_preprocessing.helper_fns import query_builder
+from data_preprocessing.helper_fns import filter_by_drivebatch,add_status_columns
 from cache import cache_manager
+from context import current_batch_id
 
 pg_client = PGSQLData()
 
@@ -31,6 +32,17 @@ async def l1_get_rawdata_cleaned():
 
     df['batch_suffix'] = df['rollNo'].apply(lambda x:re.sub(r'(?=\d).*$', '', x[::-1])[::-1])
     df['batch_suffix'] = df['batch_suffix'].map(rollno_suffix_mapping)
+
+    df["driveBatchName"] = df["driveName"].apply(
+        lambda name: next(
+            (batch_name for prefix, batch_name in batch_prefixes.items()
+            if str(name).startswith(prefix)),
+            None
+        )
+    )
+    if current_batch_id.get() != 'nobatch': # <- to handle trainee dashboard logins
+        df = filter_by_drivebatch(df)
+    df = df.drop(['driveName','driveBatchName'],axis=1)
     return df
 
 async def l1_get_userid_name_mapping():
@@ -74,17 +86,19 @@ async def l1_get_proper_dashboard_data_unprocessed():
         else:
             return 'Fail'
     
-    for dep in deps_mapping.values():
-        cols = [f'{dep}_Attempt 1 %',f'{dep}_Attempt 2 %',f'{dep}_Attempt 3 %',f'{dep} Final Score %']
-        status_cols = [f'{dep} Attempt 1 Status',f'{dep} Attempt 2 Status',f'{dep} Attempt 3 Status',f'{dep} Final Status']
-        for col,status_col in zip(cols,status_cols):
-            if col in df.columns:
-                df[status_col] = df[col].map(pass_fail_fn)
-            else:
-                df[col] = None
-                df[col.replace('%','').strip()] = None
-                df[status_col] = 'Pending'
+    # for dep in deps_mapping.values():
+    #     cols = [f'{dep}_Attempt 1 %',f'{dep}_Attempt 2 %',f'{dep}_Attempt 3 %',f'{dep} Final Score %']
+    #     status_cols = [f'{dep} Attempt 1 Status',f'{dep} Attempt 2 Status',f'{dep} Attempt 3 Status',f'{dep} Final Status']
+    #     for col,status_col in zip(cols,status_cols):
+    #         if col in df.columns:
+    #             df[status_col] = df[col].map(pass_fail_fn)
+    #         else:
+    #             df[col] = None
+    #             df[col.replace('%','').strip()] = None
+    #             df[status_col] = 'Pending'
         
+
+    df = add_status_columns(df,deps_mapping,pass_fail_fn)
 
     new_order = ['candidateName','Employee Code','hallName']
 

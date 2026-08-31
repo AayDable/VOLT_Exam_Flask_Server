@@ -2,6 +2,9 @@ import functools
 from mappings import *
 import pandas as pd
 from jinja2 import Template
+from context import current_batch_id
+import re
+import unicodedata
 
 def query_builder(template_string, **kwargs):
     """
@@ -122,3 +125,82 @@ def transform_to_matrix(df,departments):
         result['Status'].append(status[0] if len(status) > 0 else None)
     
     return pd.DataFrame(result)
+
+
+def filter_by_drivebatch(df):
+    df = df[df['driveBatchName'] == current_batch_id.get()] # <- BATCH FILTERING
+    return df
+
+import pandas as pd
+from collections.abc import Callable, Mapping
+
+
+def add_status_columns(
+    df: pd.DataFrame,
+    dep_map: Mapping,
+    pass_fail_fn: Callable,
+) -> pd.DataFrame:
+    """
+    Add attempt/final status columns for each department.
+
+    Parameters
+    ----------
+    df:
+        Input DataFrame.
+    dep_map:
+        Mapping whose values are department names.
+    pass_fail_fn:
+        Function used to convert score values into pass/fail statuses.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with the generated columns added.
+    """
+
+    new_cols = {}
+
+    for dep in dep_map.values():
+        cols = [
+            f"{dep}_Attempt 1 %",
+            f"{dep}_Attempt 2 %",
+            f"{dep}_Attempt 3 %",
+            f"{dep} Final Score %",
+        ]
+
+        status_cols = [
+            f"{dep} Attempt 1 Status",
+            f"{dep} Attempt 2 Status",
+            f"{dep} Attempt 3 Status",
+            f"{dep} Final Status",
+        ]
+
+        for col, status_col in zip(cols, status_cols):
+            if col in df.columns:
+                new_cols[status_col] = df[col].map(pass_fail_fn)
+            else:
+                new_cols[col] = None
+                new_cols[col.replace("%", "").strip()] = None
+                new_cols[status_col] = "Pending"
+
+    # Remove columns that are about to be added/replaced, then add them once.
+    result = pd.concat(
+        [
+            df.drop(columns=list(new_cols), errors="ignore"),
+            pd.DataFrame(new_cols, index=df.index),
+        ],
+        axis=1,
+    )
+
+    return result
+
+def to_snake_case(text):
+    # Remove accents/diacritics
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+
+    # Replace non-alphanumeric characters with underscores
+    text = re.sub(r"[^a-zA-Z0-9]+", "_", text)
+
+    # Remove leading/trailing underscores and convert to lowercase
+    return text.strip("_").lower()

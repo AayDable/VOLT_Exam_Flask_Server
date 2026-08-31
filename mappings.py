@@ -36,3 +36,5 @@ rollno_suffix_mapping =  {
                          }
 
 dashboard_data_col_mapping = {'candidateName':'Employee Name','hallName':'Core School'}
+
+batch_prefixes = {'VOLT_2.0':'VOLT Batch 2','VOLT_':'VOLT Batch 1'}
